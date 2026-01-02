@@ -150,14 +150,14 @@ class PolicyWithMu(tf.Module):
     def save_weights(self, save_dir, iteration):
         model_pairs = [(model.name, model) for model in self.models]
         target_model_pairs = [(target_model.name, target_model) for target_model in self.target_models]
-        optimizer_pairs = [(optimizer._name, optimizer) for optimizer in self.optimizers]
+        optimizer_pairs = [(optimizer.name, optimizer) for optimizer in self.optimizers]
         ckpt = self.tf.train.Checkpoint(**dict(model_pairs + target_model_pairs + optimizer_pairs))
         ckpt.save(save_dir + '/ckpt_ite' + str(iteration))
 
     def load_weights(self, load_dir, iteration):
         model_pairs = [(model.name, model) for model in self.models]
         target_model_pairs = [(target_model.name, target_model) for target_model in self.target_models]
-        optimizer_pairs = [(optimizer._name, optimizer) for optimizer in self.optimizers]
+        optimizer_pairs = [(optimizer.name, optimizer) for optimizer in self.optimizers]
         ckpt = self.tf.train.Checkpoint(**dict(model_pairs + target_model_pairs + optimizer_pairs))
         ckpt.restore(load_dir + '/ckpt_ite' + str(iteration) + '-1')
 

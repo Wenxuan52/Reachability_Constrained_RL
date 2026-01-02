@@ -82,27 +82,27 @@ if __name__ == '__main__':
     # RAC
     trj_RAC = plt_trajectory(ax,
                              'RAC (ours)',
-                             '../results/quadrotor/RAC-feasibility/2022-01-21-21-19-42/logs/tester/test-2022-01-22-11-14-25')
+                             '../results/quadrotor/RAC-feasibility/2026-01-01-12-43-31/logs/tester/test-2026-01-02-02-55-06')
 
-    # SAC-L
-    trj_SACL = plt_trajectory(ax,
-                             'SAC-Lagrangian',
-                              '../results/quadrotor/SAC-Lagrangian-Qc/2022-01-18-07-51-09/logs/tester/test-2022-01-22-11-52-41')
+    # # SAC-L
+    # trj_SACL = plt_trajectory(ax,
+    #                          'SAC-Lagrangian',
+    #                           '../results/quadrotor/SAC-Lagrangian-Qc/2022-01-18-07-51-09/logs/tester/test-2022-01-22-11-52-41')
 
-    # SAC-Reward Shaping
-    trj_SACRS = plt_trajectory(ax,
-                              'SAC-Reward Shaping',
-                               '../results/quadrotor/SAC-RewardShaping-Qc/data2plot/2022-01-18-15-59-47/logs/tester/test-2022-01-22-11-51-45')
+    # # SAC-Reward Shaping
+    # trj_SACRS = plt_trajectory(ax,
+    #                           'SAC-Reward Shaping',
+    #                            '../results/quadrotor/SAC-RewardShaping-Qc/data2plot/2022-01-18-15-59-47/logs/tester/test-2022-01-22-11-51-45')
 
-    # SAC-CBF
-    trj_SACCBF = plt_trajectory(ax,
-                               'SAC-CBF',
-                               '../results/quadrotor/SAC-CBF-CBF/2022-01-24-12-52-48/logs/tester/test-2022-01-24-23-19-02')
+    # # SAC-CBF
+    # trj_SACCBF = plt_trajectory(ax,
+    #                            'SAC-CBF',
+    #                            '../results/quadrotor/SAC-CBF-CBF/2022-01-24-12-52-48/logs/tester/test-2022-01-24-23-19-02')
 
-    # SAC-Energy
-    trj_SACenergy = plt_trajectory(ax,
-                                   'SAC-SI',
-                                   '../results/quadrotor/FSAC-A-si/2022-01-21-21-53-18/logs/tester/test-2022-01-22-12-11-01')
+    # # SAC-Energy
+    # trj_SACenergy = plt_trajectory(ax,
+    #                                'SAC-SI',
+    #                                '../results/quadrotor/FSAC-A-si/2022-01-21-21-53-18/logs/tester/test-2022-01-22-12-11-01')
 
     # # SAC-uncstr
     # plt_trajectory('../results/quadrotor/SAC/experiment-2021-12-27-22-26-02/logs/tester/test-2021-12-28-10-53-49')
@@ -126,4 +126,6 @@ if __name__ == '__main__':
               loc='lower center', ncol=5)
     plt.title('Quadrotor Tracking Trajectories Visualization', fontsize=14)
     # plt.tight_layout(pad=0.5)
-    plt.show()
+    out = "traj_vis.png"
+    plt.savefig(out, dpi=100, bbox_inches="tight")
+    print("saved to", out)

@@ -1,13 +1,13 @@
 #!/bin/bash -l
-#SBATCH --job-name=rcrl_original_evaluator
+#SBATCH --job-name=rcrl_test
 #SBATCH --partition=root
 #SBATCH --qos=long
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=28
 #SBATCH --mem=192G
 #SBATCH --time=24:00:00
-#SBATCH -e rcrl_original_evaluator.err
-#SBATCH -o rcrl_original_evaluator.out
+#SBATCH -e rcrl_test.err
+#SBATCH -o rcrl_test.out
 
 set -euo pipefail
 
@@ -91,4 +91,5 @@ echo "===================="
 # Use srun to bind resources properly under Slurm
 # -------------------------
 cd "$REPO/train_scripts"
-srun --cpu-bind=cores python ./train_script.py
+python -u train_script.py \
+  --mode testing

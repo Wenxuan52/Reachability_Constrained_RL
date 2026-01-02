@@ -297,7 +297,9 @@ class Visualizer_quadrotor(object):
                                      norm=norm,
                                      cmap='rainbow',
                                      # levels=[-0.06, -0.04, -0.02, 0., 0.2, 0.6, 1.0, 1.2])  # CBF
-                                     levels=[-1.2, -0.6, 0., 1.2, 2.4, 3.6, 4.8])  # RAC
+                                     levels=[-1.2, -0.6, 0., 1.2, 2.4, 3.6, 4.8],
+                                     extend='both'
+                                     )  # RAC
                                      # levels=[-1.2, -0.8, -0.4, 0., 0.4, 0.8, 1.2])  # SI
                 ct_line = sub_ax.contour(self.X, self.Z, data2plot[i],
                                          levels=[0], colors='black',
@@ -326,12 +328,14 @@ class Visualizer_quadrotor(object):
 
         fig.supxlabel('x')
         fig.supylabel('z')
-        plt.show()
+        out = "region_vis.png"
+        plt.savefig(out, dpi=100, bbox_inches="tight")
+        print("saved to", out)
 
 
 if __name__ == '__main__':
-    vizer = Visualizer_quadrotor('../results/quadrotor/round1/RAC-feasibility/2022-01-09-02-00-54',
-                                 2000000,
+    vizer = Visualizer_quadrotor('../results/quadrotor/RAC-feasibility/2026-01-01-12-43-31/',
+                                 iteration=1000000,
                                  bound=[-1.5, 1.5, 0, 2],
                                  z_dot_list=[-1., 0., 1.])
     vizer.plot_region(['fea'])

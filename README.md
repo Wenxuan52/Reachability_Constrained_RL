@@ -22,7 +22,7 @@ To train the algorithm(s) in the paper, run these commands or directly run `sh b
 ```train
 $ export PYTHONPATH=/your/path/to/Reachability_Constrained_RL/:$PYTHONPATH
 $ cd ./train_scripts/
-$ python train_scripts.py                # RCRL (RAC)
+$ python train_script.py                # RCRL (RAC)
 $ python train_scripts4saclag.py         # SAC-Lagrangian
 $ python train_scripts4rew_shaping.py    # SAC-Reward Shaping
 $ python train_scripts4cbf.py            # SAC-CBF
