@@ -5,12 +5,8 @@ import json
 import os
 from typing import Dict
 
-os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.7")
-os.environ.setdefault("JAX_PLATFORM_NAME", "gpu")
-
-import jax.numpy as jnp
 import numpy as np
+import tensorflow as tf
 from tensorboardX import SummaryWriter
 import yaml
 
@@ -24,6 +20,15 @@ def make_env(seed: int, quad_cfg: Dict):
     env = make("quadrotor", **quad_cfg)
     env.seed(seed)
     return env
+
+
+def setup_tf_gpu():
+    gpus = tf.config.list_physical_devices('GPU')
+    for gpu in gpus:
+        try:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        except Exception:
+            pass
 
 
 def build_log_dir(args):
@@ -83,16 +88,16 @@ def init_writer(log_dir):
     return SummaryWriter(logdir=log_dir)
 
 
-def to_jax_batch(batch):
+def to_tf_batch(batch):
     obs, act, rew, next_obs, done, cost, _ = batch
     not_terminated = 1.0 - done
     return {
-        "observations": jnp.array(obs),
-        "actions": jnp.array(act),
-        "rewards": jnp.array(rew),
-        "next_observations": jnp.array(next_obs),
-        "not_terminated": jnp.array(not_terminated),
-        "costs": jnp.array(cost),
+        "observations": tf.convert_to_tensor(obs, dtype=tf.float32),
+        "actions": tf.convert_to_tensor(act, dtype=tf.float32),
+        "rewards": tf.convert_to_tensor(rew, dtype=tf.float32),
+        "next_observations": tf.convert_to_tensor(next_obs, dtype=tf.float32),
+        "not_terminated": tf.convert_to_tensor(not_terminated, dtype=tf.float32),
+        "costs": tf.convert_to_tensor(cost, dtype=tf.float32),
     }
 
 
@@ -105,9 +110,8 @@ def evaluate_policy(agent, env, episodes: int, fixed_steps=None):
         total_r = 0.0
         total_violation = 0.0
         step = 0
-        local_agent = agent
         while not done:
-            action, local_agent = local_agent.act(jnp.array(obs), deterministic=True)
+            action, _ = agent.act(np.array(obs, dtype=np.float32), deterministic=True)
             action = np.asarray(action)
             next_obs, reward, done, info = env.step(action)
             total_r += reward
@@ -129,6 +133,7 @@ def evaluate_policy(agent, env, episodes: int, fixed_steps=None):
 def main():
     args = parse_args()
     quad_cfg = load_quad_cfg(args.config)
+    setup_tf_gpu()
     if args.fixed_steps is None:
         args.fixed_steps = int(
             quad_cfg.get("episode_len_sec", 6) * quad_cfg.get("ctrl_freq", 60)
@@ -136,10 +141,12 @@ def main():
     log_dir = build_log_dir(args) if args.mode == "training" else args.test_dir
     writer = init_writer(log_dir)
 
-    with open(os.path.join(log_dir, "config.json"), "w") as f:
-        json.dump(vars(args), f, indent=2)
+    if args.mode == "training":
+        with open(os.path.join(log_dir, "config.json"), "w") as f:
+            json.dump(vars(args), f, indent=2)
 
     np.random.seed(args.seed)
+    tf.random.set_seed(args.seed)
 
     env = make_env(args.seed, quad_cfg)
     eval_env = make_env(args.seed + 42, quad_cfg)
@@ -151,6 +158,54 @@ def main():
     buffer._maxsize = args.buffer_size
     buffer.replay_batch_size = args.batch_size
     buffer.replay_starts = args.start_training
+
+    if args.mode == "testing":
+        assert args.test_dir is not None
+        cfg_path = os.path.join(args.test_dir, "config.json")
+        if os.path.exists(cfg_path):
+            with open(cfg_path, "r") as f:
+                saved_args = json.load(f)
+            args.T = saved_args.get("T", args.T)
+            args.clip_sampler = saved_args.get("clip_sampler", args.clip_sampler)
+            args.beta_schedule = saved_args.get("beta_schedule", args.beta_schedule)
+            args.ddpm_temperature = saved_args.get("ddpm_temperature", args.ddpm_temperature)
+            args.cost_limit = saved_args.get("cost_limit", args.cost_limit)
+            args.safety_discount = saved_args.get("safety_discount", args.safety_discount)
+            args.safety_lambda = saved_args.get("safety_lambda", args.safety_lambda)
+            args.alpha_coef = saved_args.get("alpha_coef", args.alpha_coef)
+            args.M_q = saved_args.get("M_q", args.M_q)
+            args.safety_threshold = saved_args.get("safety_threshold", args.safety_threshold)
+
+        ssm_cfg = get_ssm_config()
+        learner = SafeScoreMatchingLearner.create(
+            seed=args.seed,
+            observation_space=obs_space,
+            action_space=act_space,
+            actor_lr=args.actor_lr,
+            critic_lr=args.critic_lr,
+            safety_lr=args.safety_lr,
+            T=args.T,
+            clip_sampler=args.clip_sampler,
+            beta_schedule=args.beta_schedule,
+            ddpm_temperature=args.ddpm_temperature,
+            cost_limit=args.cost_limit,
+            safety_discount=args.safety_discount,
+            safety_lambda=args.safety_lambda,
+            alpha_coef=args.alpha_coef,
+            M_q=args.M_q,
+            safety_threshold=args.safety_threshold,
+            actor_hidden_dims=tuple(ssm_cfg.actor_hidden_dims),
+            critic_hidden_dims=tuple(ssm_cfg.critic_hidden_dims),
+            safety_hidden_dims=tuple(ssm_cfg.safety_hidden_dims),
+        )
+
+        ckpt_dir = os.path.join(args.test_dir, "checkpoints") if args.test_dir else None
+        SafeScoreMatchingLearner.load(learner, ckpt_dir or args.test_dir)
+        results = evaluate_policy(learner, eval_env, args.num_eval_episode, args.fixed_steps)
+        print(json.dumps(results, indent=2))
+        with open(os.path.join(args.test_dir, "test_results.json"), "w") as f:
+            json.dump(results, f, indent=2)
+        return
 
     ssm_cfg = get_ssm_config()
     learner = SafeScoreMatchingLearner.create(
@@ -175,16 +230,6 @@ def main():
         safety_hidden_dims=tuple(ssm_cfg.safety_hidden_dims),
     )
 
-    if args.mode == "testing":
-        assert args.test_dir is not None
-        ckpt_dir = os.path.join(args.test_dir, "checkpoints") if args.test_dir else None
-        learner = SafeScoreMatchingLearner.load(ckpt_dir or args.test_dir)
-        results = evaluate_policy(learner, eval_env, args.num_eval_episode, args.fixed_steps)
-        print(json.dumps(results, indent=2))
-        with open(os.path.join(args.test_dir, "test_results.json"), "w") as f:
-            json.dump(results, f, indent=2)
-        return
-
     obs = env.reset()
     episode_return = 0.0
     episode_cost = 0.0
@@ -194,7 +239,7 @@ def main():
         if step < args.start_training:
             action = env.action_space.sample()
         else:
-            action, learner = learner.act(jnp.array(obs))
+            action, _ = learner.act(np.array(obs, dtype=np.float32))
             action = np.asarray(action)
 
         next_obs, reward, done, info = env.step(action)
@@ -216,8 +261,8 @@ def main():
 
         if step >= args.start_training and len(buffer) >= args.start_training:
             batch = buffer.sample(args.batch_size)
-            jax_batch = to_jax_batch(batch)
-            learner, metrics = learner.update(jax_batch)
+            tf_batch = to_tf_batch(batch)
+            learner, metrics = learner.update(tf_batch)
             for k, v in metrics.items():
                 writer.add_scalar(f"train/{k}", float(np.array(v)), step)
 

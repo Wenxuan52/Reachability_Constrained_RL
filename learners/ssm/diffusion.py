@@ -1,154 +1,84 @@
-from functools import partial
-from typing import Callable, Optional, Sequence, Type
-import flax.linen as nn
-import jax.numpy as jnp
-import jax
+import tensorflow as tf
 
-def cosine_beta_schedule(timesteps, s = 0.008):
-    """
-    cosine schedule
-    as proposed in https://openreview.net/forum?id=-NEXDKk8gZ
-    """
+
+def cosine_beta_schedule(timesteps, s: float = 0.008):
+    """Cosine schedule from https://openreview.net/forum?id=-NEXDKk8gZ."""
     steps = timesteps + 1
-    t = jnp.linspace(0, timesteps, steps) / timesteps
-    alphas_cumprod = jnp.cos((t + s) / (1 + s) * jnp.pi * 0.5) ** 2
+    t = tf.linspace(0.0, float(timesteps), steps) / float(timesteps)
+    alphas_cumprod = tf.math.cos((t + s) / (1.0 + s) * tf.constant(tf.constant(3.141592653589793) * 0.5)) ** 2
     alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
-    betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
-    return jnp.clip(betas, 0, 0.999)
+    betas = 1.0 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+    return tf.clip_by_value(betas, 0.0, 0.999)
 
-def linear_beta_schedule(timesteps, beta_start=1e-4, beta_end=2e-2):
-    betas = jnp.linspace(
-        beta_start, beta_end, timesteps
-    )
-    return betas
+
+def linear_beta_schedule(timesteps, beta_start: float = 1e-4, beta_end: float = 2e-2):
+    return tf.linspace(beta_start, beta_end, timesteps)
+
 
 def vp_beta_schedule(timesteps):
-    t = jnp.arange(1, timesteps + 1)
-    T = timesteps
-    b_max = 10.
+    t = tf.cast(tf.range(1, timesteps + 1), tf.float32)
+    T = float(timesteps)
+    b_max = 10.0
     b_min = 0.1
-    alpha = jnp.exp(-b_min / T - 0.5 * (b_max - b_min) * (2 * t - 1) / T ** 2)
-    betas = 1 - alpha
+    alpha = tf.exp(-b_min / T - 0.5 * (b_max - b_min) * (2.0 * t - 1.0) / (T ** 2))
+    betas = 1.0 - alpha
     return betas
 
-class FourierFeatures(nn.Module):
-    output_size: int
-    learnable: bool = True
 
-    @nn.compact
-    def __call__(self, x: jnp.ndarray):
+class FourierFeatures(tf.keras.layers.Layer):
+    def __init__(self, output_size: int, learnable: bool = True, **kwargs):
+        super().__init__(**kwargs)
+        self.output_size = output_size
+        self.learnable = learnable
+
+    def build(self, input_shape):
         if self.learnable:
-            w = self.param('kernel', nn.initializers.normal(0.2),
-                           (self.output_size // 2, x.shape[-1]), jnp.float32)
-            f = 2 * jnp.pi * x @ w.T
+            self.kernel = self.add_weight(
+                "kernel", shape=(self.output_size // 2, int(input_shape[-1])), initializer=tf.keras.initializers.RandomNormal(stddev=0.2)
+            )
+        super().build(input_shape)
+
+    def call(self, inputs):
+        if self.learnable:
+            f = 2.0 * tf.constant(tf.constant(3.141592653589793)) * tf.matmul(inputs, self.kernel, transpose_b=True)
         else:
             half_dim = self.output_size // 2
-            f = jnp.log(10000) / (half_dim - 1)
-            f = jnp.exp(jnp.arange(half_dim) * -f)
-            f = x * f
-        return jnp.concatenate([jnp.cos(f), jnp.sin(f)], axis=-1)
+            f = tf.math.log(10000.0) / (half_dim - 1)
+            f = tf.exp(tf.range(half_dim, dtype=tf.float32) * -f)
+            f = inputs * f
+        return tf.concat([tf.math.cos(f), tf.math.sin(f)], axis=-1)
 
-class DDPM(nn.Module):
-    cond_encoder_cls: Type[nn.Module]
-    reverse_encoder_cls: Type[nn.Module]
-    time_preprocess_cls: Type[nn.Module]
 
-    @nn.compact
-    def __call__(self,
-                 s: jnp.ndarray,
-                 a: jnp.ndarray,
-                 time: jnp.ndarray,
-                 training: bool = False):
+class DDPM(tf.keras.Model):
+    def __init__(self, cond_encoder, reverse_encoder, time_preprocess, **kwargs):
+        super().__init__(**kwargs)
+        self.cond_encoder = cond_encoder
+        self.reverse_encoder = reverse_encoder
+        self.time_preprocess = time_preprocess
 
-        t_ff = self.time_preprocess_cls()(time)
-        cond = self.cond_encoder_cls()(t_ff, training=training)
-        reverse_input = jnp.concatenate([a, s, cond], axis=-1)
+    def call(self, obs, act, time, training: bool = False):
+        t_ff = self.time_preprocess(time)
+        cond = self.cond_encoder(t_ff, training=training)
+        reverse_input = tf.concat([act, obs, cond], axis=-1)
+        return self.reverse_encoder(reverse_input, training=training)
 
-        return self.reverse_encoder_cls()(reverse_input, training=training)
 
-@partial(jax.jit, static_argnames=('actor_apply_fn', 'act_dim', 'T', 'clip_sampler', 'training'))
-def ddpm_sampler(actor_apply_fn, actor_params, T, rng, act_dim, observations, alphas, alpha_hats, betas, sample_temperature, clip_sampler, training = False):
+def ddpm_sampler(actor_model: tf.keras.Model, T: int, act_dim: int, observations: tf.Tensor,
+                 alphas: tf.Tensor, alpha_hats: tf.Tensor, betas: tf.Tensor,
+                 sample_temperature: float, clip_sampler: bool, training: bool = False):
+    batch_size = tf.shape(observations)[0]
+    current_x = tf.random.normal((batch_size, act_dim))
 
-    batch_size = observations.shape[0]
-    
-    def fn(input_tuple, time):
-        current_x, rng = input_tuple
-        
-        input_time = jnp.expand_dims(
-            jnp.array([time]).repeat(current_x.shape[0]), axis=1)
-        eps_pred = actor_apply_fn(
-            {"params": actor_params},
-            observations, current_x,
-            input_time, training=training)
-
-        alpha_1 = 1 / jnp.sqrt(alphas[time])
-        alpha_2 = ((1 - alphas[time]) / (jnp.sqrt(1 - alpha_hats[time])))
+    for t in range(T - 1, -1, -1):
+        time = tf.ones((batch_size, 1), dtype=tf.float32) * float(t)
+        eps_pred = actor_model(observations, current_x, time, training=training)
+        alpha = alphas[t]
+        alpha_hat = alpha_hats[t]
+        alpha_1 = 1.0 / tf.sqrt(alpha)
+        alpha_2 = (1.0 - alpha) / tf.sqrt(1.0 - alpha_hat)
         current_x = alpha_1 * (current_x - alpha_2 * eps_pred)
-
-        rng, key = jax.random.split(rng, 2)
-        z = jax.random.normal(
-            key, shape=(observations.shape[0], current_x.shape[1]),)
-
-        z_scaled = sample_temperature * z
-        current_x = current_x + (time > 0) * (jnp.sqrt(betas[time]) * z_scaled)
-        current_x = jnp.clip(current_x, -1, 1) if clip_sampler else current_x
-        return (current_x, rng), ()
-
-    key, rng = jax.random.split(rng, 2)
-    (action_0, rng), () = jax.lax.scan(
-        fn, (jax.random.normal(key, (batch_size, act_dim)), rng),
-        jnp.arange(T-1, -1, -1), unroll=5)
-    action_0 = jnp.clip(action_0, -1, 1)
-    return action_0, rng
-
-@partial(jax.jit, static_argnames=('actor_apply_fn', 'act_dim', 'T', 'clip_sampler', 'training'))
-def ddpm_sampler_keepinner(actor_apply_fn, actor_params, T, rng, act_dim, observations, alphas, alpha_hats, betas, sample_temperature, clip_sampler, training = False):
-
-    batch_size = observations.shape[0]
-    
-    def fn(input_tuple, time):
-        current_x, logprob_total, rng = input_tuple
-
-        input_time = jnp.expand_dims(
-            jnp.array([time]).repeat(current_x.shape[0]), axis=1)
-        eps_pred = actor_apply_fn(
-            {"params": actor_params},
-            observations, current_x,
-            input_time, training=training)
-
-        alpha_1 = 1 / jnp.sqrt(alphas[time])
-        alpha_2 = ((1 - alphas[time]) / (jnp.sqrt(1 - alpha_hats[time])))
-        current_x_plus = alpha_1 * (current_x - alpha_2 * eps_pred)
-
-        rng, key = jax.random.split(rng, 2)
-        z = jax.random.normal(
-            key, shape=(observations.shape[0], current_x.shape[1]),)
-        z_scaled = sample_temperature * z
-        current_z = current_x_plus + (time > 0) * (jnp.sqrt(betas[time]) * z_scaled)
-
-        # compute logprob of current_z, scaled norm with respect to current_x
-        logprobs = -0.5 * jnp.sum((current_z - current_x) ** 2, axis=-1)
-        # scale and normalize if nonzero variance, otherwise set to 0
-        condition = (time > 0) & (jnp.sqrt(betas[time]) * sample_temperature > 0)
-        logprobs = jax.lax.cond(condition, 
-             lambda _: (1 / (betas[time] * sample_temperature**2))* logprobs, 
-             lambda _: jnp.zeros_like(logprobs),
-             None)
-        logprob_total = logprob_total + logprobs
-
-        current_x = jnp.clip(current_z, -1, 1) if clip_sampler else current_x
-
-        return (current_x, logprob_total, rng), ()
-
-    key, rng = jax.random.split(rng, 2)
-    (action_0, logprob_total, rng), () = jax.lax.scan(
-        fn, (jax.random.normal(key, (batch_size, act_dim)), jnp.zeros(batch_size), rng),
-        jnp.arange(T-1, -1, -1), unroll=5)
-    action_0 = jnp.clip(action_0, -1, 1)
-    logprob_total = (1/T)*logprob_total
-
-    # new actions have the logprob totals appended at the end of each action
-    # log_prob_total = jnp.expand_dims(logprob_total, axis=-1)
-    # all_actions = jnp.concatenate((action_0, log_prob_total), axis=1)
-    # assert all_actions.shape == (batch_size, act_dim+1)
-    return action_0, logprob_total, rng
+        noise = tf.random.normal((batch_size, act_dim))
+        current_x = current_x + (tf.cast(t > 0, tf.float32) * tf.sqrt(betas[t]) * sample_temperature * noise)
+        if clip_sampler:
+            current_x = tf.clip_by_value(current_x, -1.0, 1.0)
+    return tf.clip_by_value(current_x, -1.0, 1.0)

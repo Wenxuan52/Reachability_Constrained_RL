@@ -1,88 +1,93 @@
-"""Safe Score Matching learner built on the QSM implementation."""
-from functools import partial
-from typing import Dict, Optional, Sequence, Tuple, Union
+"""TensorFlow implementation of Safe Score Matching learner."""
+from typing import Dict, Optional, Sequence
 
-import flax.linen as nn
-import gym
-import jax
-import jax.numpy as jnp
-import optax
-from flax import struct
-from flax.training.train_state import TrainState
-from flax.training import checkpoints
-from flax import serialization
+import numpy as np
+import tensorflow as tf
 
-from .diffusion import DDPM, cosine_beta_schedule, ddpm_sampler, vp_beta_schedule
+from .diffusion import DDPM, cosine_beta_schedule, ddpm_sampler, vp_beta_schedule, FourierFeatures
 from .mlp import MLP
-from .state_action_value import StateActionValue, FourierFeatures
-
-
-tree_map = jax.tree_util.tree_map
-sg = lambda x: tree_map(jax.lax.stop_gradient, x)
+from .state_action_value import StateActionValue
 
 
 def mish(x):
-    return x * jnp.tanh(nn.softplus(x))
+    return x * tf.math.tanh(tf.nn.softplus(x))
 
 
-def tensorstats(tensor, prefix=None):
-    assert tensor.size > 0, tensor.shape
-    metrics = {
-        "mean": tensor.mean(),
-        "std": tensor.std(),
-        "mag": jnp.abs(tensor).max(),
-        "min": tensor.min(),
-        "max": tensor.max(),
-    }
-    if prefix:
-        metrics = {f"{prefix}_{k}": v for k, v in metrics.items()}
-    return metrics
+def soft_update(target: tf.keras.Model, source: tf.keras.Model, tau: float):
+    for target_var, source_var in zip(target.trainable_variables, source.trainable_variables):
+        target_var.assign(tau * source_var + (1.0 - tau) * target_var)
 
 
-@struct.dataclass
 class SafeScoreMatchingLearner:
-    score_model: TrainState
-    critic_1: TrainState
-    critic_2: TrainState
-    target_critic_1: TrainState
-    target_critic_2: TrainState
-    safety_critic: TrainState
-    target_safety_critic: TrainState
-
-    discount: float
-    tau: float
-    safety_tau: float
-    act_dim: int = struct.field(pytree_node=False)
-    T: int = struct.field(pytree_node=False)
-    clip_sampler: bool = struct.field(pytree_node=False)
-    ddpm_temperature: float
-    betas: jnp.ndarray
-    alphas: jnp.ndarray
-    alpha_hats: jnp.ndarray
-    M_q: float
-    rng: jax.random.PRNGKey
-
-    cost_limit: float
-    safety_discount: float
-    safety_lambda: float
-    alpha_coef: float
-    safety_threshold: float
-    safety_grad_scale: float
-    safe_lagrange_coef: float
-
-    def act(self, observation: jnp.ndarray, deterministic: bool = False):
-        if deterministic:
-            return self.eval_actions(observation)
-        return self.sample_actions(observation)
+    def __init__(
+        self,
+        score_model: DDPM,
+        critic_1: StateActionValue,
+        critic_2: StateActionValue,
+        target_critic_1: StateActionValue,
+        target_critic_2: StateActionValue,
+        safety_critic: StateActionValue,
+        target_safety_critic: StateActionValue,
+        score_opt: tf.keras.optimizers.Optimizer,
+        critic_opt: tf.keras.optimizers.Optimizer,
+        safety_opt: tf.keras.optimizers.Optimizer,
+        discount: float,
+        tau: float,
+        safety_tau: float,
+        act_dim: int,
+        T: int,
+        clip_sampler: bool,
+        ddpm_temperature: float,
+        betas: tf.Tensor,
+        alphas: tf.Tensor,
+        alpha_hats: tf.Tensor,
+        M_q: float,
+        cost_limit: float,
+        safety_discount: float,
+        safety_lambda: float,
+        alpha_coef: float,
+        safety_threshold: float,
+        safety_grad_scale: float,
+        safe_lagrange_coef: float,
+        seed: int,
+    ):
+        self.score_model = score_model
+        self.critic_1 = critic_1
+        self.critic_2 = critic_2
+        self.target_critic_1 = target_critic_1
+        self.target_critic_2 = target_critic_2
+        self.safety_critic = safety_critic
+        self.target_safety_critic = target_safety_critic
+        self.score_opt = score_opt
+        self.critic_opt = critic_opt
+        self.safety_opt = safety_opt
+        self.discount = discount
+        self.tau = tau
+        self.safety_tau = safety_tau
+        self.act_dim = act_dim
+        self.T = T
+        self.clip_sampler = clip_sampler
+        self.ddpm_temperature = ddpm_temperature
+        self.betas = betas
+        self.alphas = alphas
+        self.alpha_hats = alpha_hats
+        self.M_q = M_q
+        self.cost_limit = cost_limit
+        self.safety_discount = safety_discount
+        self.safety_lambda = safety_lambda
+        self.alpha_coef = alpha_coef
+        self.safety_threshold = safety_threshold
+        self.safety_grad_scale = safety_grad_scale
+        self.safe_lagrange_coef = safe_lagrange_coef
+        self._rng = tf.random.Generator.from_seed(seed)
 
     @classmethod
     def create(
         cls,
         seed: int,
-        observation_space: gym.spaces.Space,
-        action_space: gym.spaces.Box,
-        actor_architecture: str = "mlp",
-        actor_lr: Union[float, optax.Schedule] = 3e-4,
+        observation_space,
+        action_space,
+        actor_lr: float = 3e-4,
         critic_lr: float = 3e-4,
         safety_lr: float = 3e-4,
         critic_hidden_dims: Sequence[int] = (256, 256),
@@ -97,7 +102,6 @@ class SafeScoreMatchingLearner:
         time_dim: int = 64,
         clip_sampler: bool = True,
         beta_schedule: str = "vp",
-        decay_steps: Optional[int] = int(2e6),
         M_q: float = 1.0,
         cost_limit: float = 25.0,
         safety_discount: float = 0.99,
@@ -107,487 +111,105 @@ class SafeScoreMatchingLearner:
         safety_grad_scale: float = 1.0,
         safe_lagrange_coef: float = 0.5,
     ):
-        rng = jax.random.PRNGKey(seed)
-        rng, actor_key, critic_key, safety_key = jax.random.split(rng, 4)
-        actions = action_space.sample()
-        observations = observation_space.sample()
-        action_dim = action_space.shape[-1]
-
-        preprocess_time_cls = partial(
-            FourierFeatures, output_size=time_dim, learnable=True
-        )
-
-        cond_model_cls = partial(
-            MLP,
-            hidden_dims=(128, 128),
-            activations=mish,
-            activate_final=False,
-        )
-
-        if decay_steps is not None:
-            actor_lr = optax.cosine_decay_schedule(actor_lr, decay_steps)
-
-        if actor_architecture == "mlp":
-            base_model_cls = partial(
-                MLP,
-                hidden_dims=tuple(list(actor_hidden_dims) + [action_dim]),
-                activations=mish,
-                use_layer_norm=actor_layer_norm,
-                activate_final=False,
-            )
-
-            actor_def = DDPM(
-                time_preprocess_cls=preprocess_time_cls,
-                cond_encoder_cls=cond_model_cls,
-                reverse_encoder_cls=base_model_cls,
-            )
-        else:
-            raise ValueError(f"Invalid actor architecture: {actor_architecture}")
-
-        time = jnp.zeros((1, 1))
-        observations = jnp.expand_dims(observations, axis=0)
-        actions = jnp.expand_dims(actions, axis=0)
-        actor_params = actor_def.init(actor_key, observations, actions, time)["params"]
-
-        score_model = TrainState.create(
-            apply_fn=actor_def.apply,
-            params=actor_params,
-            tx=optax.adam(learning_rate=actor_lr),
-        )
-
-        critic_base_cls = partial(
-            MLP, hidden_dims=critic_hidden_dims, activate_final=True
-        )
-        critic_def = StateActionValue(critic_base_cls)
-        critic_key_1, critic_key_2 = jax.random.split(critic_key, 2)
-        critic_params_1 = critic_def.init(critic_key_1, observations, actions)["params"]
-        critic_params_2 = critic_def.init(critic_key_2, observations, actions)["params"]
-        critic_1 = TrainState.create(
-            apply_fn=critic_def.apply,
-            params=critic_params_1,
-            tx=optax.adam(learning_rate=critic_lr),
-        )
-        critic_2 = TrainState.create(
-            apply_fn=critic_def.apply,
-            params=critic_params_2,
-            tx=optax.adam(learning_rate=critic_lr),
-        )
-
-        target_critic_def = StateActionValue(critic_base_cls)
-        target_critic_1 = TrainState.create(
-            apply_fn=target_critic_def.apply,
-            params=critic_params_1,
-            tx=optax.GradientTransformation(lambda _: None, lambda _: None),
-        )
-        target_critic_2 = TrainState.create(
-            apply_fn=target_critic_def.apply,
-            params=critic_params_2,
-            tx=optax.GradientTransformation(lambda _: None, lambda _: None),
-        )
-
-        safety_base_cls = partial(
-            MLP, hidden_dims=safety_hidden_dims, activate_final=True
-        )
-        safety_def = StateActionValue(safety_base_cls)
-        safety_params = safety_def.init(safety_key, observations, actions)["params"]
-        safety_critic = TrainState.create(
-            apply_fn=safety_def.apply,
-            params=safety_params,
-            tx=optax.adam(learning_rate=safety_lr),
-        )
-        target_safety_critic = TrainState.create(
-            apply_fn=safety_def.apply,
-            params=safety_params,
-            tx=optax.GradientTransformation(lambda _: None, lambda _: None),
-        )
+        tf.random.set_seed(seed)
+        np.random.seed(seed)
+        act_dim = action_space.shape[-1]
 
         if beta_schedule == "cosine":
-            betas = jnp.array(cosine_beta_schedule(T))
-        elif beta_schedule == "linear":
-            betas = jnp.linspace(1e-4, 2e-2, T)
+            betas = cosine_beta_schedule(T)
         elif beta_schedule == "vp":
-            betas = jnp.array(vp_beta_schedule(T))
+            betas = vp_beta_schedule(T)
         else:
-            raise ValueError(f"Invalid beta schedule: {beta_schedule}")
+            betas = cosine_beta_schedule(T)
+        alphas = 1.0 - betas
+        alpha_hats = tf.math.cumprod(alphas, axis=0)
 
-        alphas = 1 - betas
-        alpha_hat = jnp.array([jnp.prod(alphas[: i + 1]) for i in range(T)])
+        preprocess_time = FourierFeatures(output_size=time_dim, learnable=True)
+        cond_encoder = MLP([128, 128], activations=[mish, mish], activate_final=True)
+        reverse_encoder = MLP(list(actor_hidden_dims) + [act_dim], activations=[mish for _ in actor_hidden_dims] + [None],
+                              activate_final=True, use_layer_norm=actor_layer_norm)
+        score_model = DDPM(cond_encoder=cond_encoder, reverse_encoder=reverse_encoder, time_preprocess=preprocess_time)
 
-        if safety_tau is None:
-            safety_tau = tau
+        dummy_obs = tf.convert_to_tensor(observation_space.sample()[None], dtype=tf.float32)
+        dummy_act = tf.convert_to_tensor(action_space.sample()[None], dtype=tf.float32)
+        dummy_time = tf.zeros((1, 1), dtype=tf.float32)
+        _ = score_model(dummy_obs, dummy_act, dummy_time, training=True)
+
+        critic_1 = StateActionValue(critic_hidden_dims)
+        critic_2 = StateActionValue(critic_hidden_dims)
+        target_critic_1 = StateActionValue(critic_hidden_dims)
+        target_critic_2 = StateActionValue(critic_hidden_dims)
+        for net in [critic_1, critic_2, target_critic_1, target_critic_2]:
+            _ = net(dummy_obs, dummy_act, training=True)
+        target_critic_1.set_weights(critic_1.get_weights())
+        target_critic_2.set_weights(critic_2.get_weights())
+
+        safety_critic = StateActionValue(safety_hidden_dims)
+        target_safety_critic = StateActionValue(safety_hidden_dims)
+        _ = safety_critic(dummy_obs, dummy_act, training=True)
+        _ = target_safety_critic(dummy_obs, dummy_act, training=True)
+        target_safety_critic.set_weights(safety_critic.get_weights())
+
+        score_opt = tf.keras.optimizers.Adam(actor_lr)
+        critic_opt = tf.keras.optimizers.Adam(critic_lr)
+        safety_opt = tf.keras.optimizers.Adam(safety_lr)
 
         return cls(
-            actor=None,
-            score_model=score_model,
-            critic_1=critic_1,
-            critic_2=critic_2,
-            target_critic_1=target_critic_1,
-            target_critic_2=target_critic_2,
-            safety_critic=safety_critic,
-            target_safety_critic=target_safety_critic,
-            tau=tau,
-            safety_tau=safety_tau,
-            discount=discount,
-            rng=rng,
-            betas=betas,
-            alpha_hats=alpha_hat,
-            act_dim=action_dim,
-            T=T,
-            alphas=alphas,
-            ddpm_temperature=ddpm_temperature,
-            clip_sampler=clip_sampler,
-            M_q=M_q,
-            cost_limit=cost_limit,
-            safety_discount=safety_discount,
-            safety_lambda=safety_lambda,
-            alpha_coef=alpha_coef,
-            safety_threshold=safety_threshold,
-            safety_grad_scale=safety_grad_scale,
-            safe_lagrange_coef=safe_lagrange_coef,
+            score_model,
+            critic_1,
+            critic_2,
+            target_critic_1,
+            target_critic_2,
+            safety_critic,
+            target_safety_critic,
+            score_opt,
+            critic_opt,
+            safety_opt,
+            discount,
+            tau,
+            safety_tau if safety_tau is not None else tau,
+            act_dim,
+            T,
+            clip_sampler,
+            ddpm_temperature,
+            tf.convert_to_tensor(betas, dtype=tf.float32),
+            tf.convert_to_tensor(alphas, dtype=tf.float32),
+            tf.convert_to_tensor(alpha_hats, dtype=tf.float32),
+            M_q,
+            cost_limit,
+            safety_discount,
+            safety_lambda,
+            alpha_coef,
+            safety_threshold,
+            safety_grad_scale,
+            safe_lagrange_coef,
+            seed,
         )
 
-    def update_q(self, batch: Dict[str, jnp.ndarray]):
-        agent = self
-        (B, _) = batch["observations"].shape
-        (_, A) = batch["actions"].shape
-
-        key, rng = jax.random.split(agent.rng)
-        next_actions, rng = ddpm_sampler(
-            agent.score_model.apply_fn,
-            agent.score_model.params,
-            agent.T,
-            rng,
-            agent.act_dim,
-            batch["next_observations"],
-            agent.alphas,
-            agent.alpha_hats,
-            agent.betas,
-            agent.ddpm_temperature,
-            agent.clip_sampler,
-        )
-        key, rng = jax.random.split(rng, 2)
-        noise = jax.random.normal(key, shape=next_actions.shape) * 0.1
-        next_actions = jnp.clip(next_actions + noise, -1.0, 1.0)
-        key, rng = jax.random.split(rng, 2)
-        assert next_actions.shape == (B, A)
-
-        key, rng = jax.random.split(rng)
-        next_q_1 = agent.target_critic_1.apply_fn(
-            {"params": agent.target_critic_1.params},
-            batch["next_observations"],
-            next_actions,
-            True,
-            rngs={"dropout": key},
-        )
-        key, rng = jax.random.split(rng)
-        next_q_2 = agent.target_critic_2.apply_fn(
-            {"params": agent.target_critic_2.params},
-            batch["next_observations"],
-            next_actions,
-            True,
-            rngs={"dropout": key},
-        )
-        next_v = jnp.stack([next_q_1, next_q_2], 0).min(0)
-        target_q = batch["rewards"] + agent.discount * batch["not_terminated"] * next_v
-        metrics = tensorstats(target_q, "target_q")
-        assert target_q.shape == (B,)
-
-        def critic_loss_fn(critic_params):
-            q = agent.critic_1.apply_fn(
-                {"params": critic_params},
-                batch["observations"],
-                batch["actions"],
-                training=True,
-            )
-            loss = (q - sg(target_q)) ** 2
-            assert loss.shape == (B,)
-            loss_mean = loss.mean()
-            met = {**tensorstats(loss, "c_loss"), **tensorstats(q, "q")}
-            return loss_mean, met
-
-        grads_c_1, metrics_c_1 = jax.grad(critic_loss_fn, has_aux=True)(
-            agent.critic_1.params
-        )
-        metrics.update({f"{k}_1": v for k, v in metrics_c_1.items()})
-        critic_1 = agent.critic_1.apply_gradients(grads=grads_c_1)
-
-        grads_c_2, metrics_c_2 = jax.grad(critic_loss_fn, has_aux=True)(
-            agent.critic_2.params
-        )
-        metrics.update({f"{k}_2": v for k, v in metrics_c_2.items()})
-        critic_2 = agent.critic_2.apply_gradients(grads=grads_c_2)
-
-        target_critic_1_params = optax.incremental_update(
-            critic_1.params, agent.target_critic_1.params, agent.tau
-        )
-        target_critic_2_params = optax.incremental_update(
-            critic_2.params, agent.target_critic_2.params, agent.tau
-        )
-        target_critic_1 = agent.target_critic_1.replace(params=target_critic_1_params)
-        target_critic_2 = agent.target_critic_2.replace(params=target_critic_2_params)
-
-        new_agent = agent.replace(
-            critic_1=critic_1,
-            critic_2=critic_2,
-            target_critic_1=target_critic_1,
-            target_critic_2=target_critic_2,
-            rng=rng,
-        )
-        return new_agent, metrics
-
-    def _safety_targets(
-        self,
-        agent,
-        batch: Dict[str, jnp.ndarray],
-        rng: jax.random.PRNGKey,
-    ):
-        next_actions, rng = ddpm_sampler(
-            agent.score_model.apply_fn,
-            agent.score_model.params,
-            agent.T,
-            rng,
-            agent.act_dim,
-            batch["next_observations"],
-            agent.alphas,
-            agent.alpha_hats,
-            agent.betas,
-            agent.ddpm_temperature,
-            agent.clip_sampler,
-        )
-        key, rng = jax.random.split(rng, 2)
-        noise = jax.random.normal(key, shape=next_actions.shape) * 0.1
-        next_actions = jnp.clip(next_actions + noise, -1.0, 1.0)
-        next_qh = agent.target_safety_critic.apply_fn(
-            {"params": agent.target_safety_critic.params},
-            batch["next_observations"],
-            next_actions,
-            training=True,
-        )
-        next_vh = jnp.maximum(0.0, next_qh)
-
-        current_qh = agent.safety_critic.apply_fn(
-            {"params": agent.safety_critic.params},
-            batch["observations"],
-            batch["actions"],
-            training=True,
-        )
-        current_vh = jnp.maximum(0.0, current_qh)
-
-        alpha_term = agent.alpha_coef * current_vh
-        candidate = agent.safety_discount * batch["not_terminated"] * next_vh - current_vh + alpha_term
-        positive_candidate = jnp.maximum(0.0, candidate)
-
-        stage_violation = jnp.maximum(0.0, batch["costs"] - agent.cost_limit)
-        target = jnp.maximum(stage_violation, positive_candidate)
-        return target, current_qh, rng
-
-    def update_safety(self, batch: Dict[str, jnp.ndarray]):
-        agent = self
-        rng = agent.rng
-        safety_target, current_qh, rng = self._safety_targets(agent, batch, rng)
-
-        def safety_loss_fn(params):
-            qh_pred = agent.safety_critic.apply_fn(
-                {"params": params},
-                batch["observations"],
-                batch["actions"],
-                training=True,
-            )
-            relu_pred = jnp.maximum(0.0, qh_pred)
-            diff = relu_pred - sg(safety_target)
-            hinge = jnp.maximum(0.0, qh_pred - sg(safety_target))
-            loss = diff ** 2 + agent.safety_lambda * hinge ** 2
-            loss = loss.mean()
-            metrics = {
-                **tensorstats(relu_pred, "qh_relu"),
-                **tensorstats(diff, "qh_diff"),
-                "qh_target_mean": safety_target.mean(),
-                "qh_loss": loss,
-            }
-            return loss, metrics
-
-        grads, metrics = jax.grad(safety_loss_fn, has_aux=True)(
-            agent.safety_critic.params
-        )
-        safety_critic = agent.safety_critic.apply_gradients(grads=grads)
-        target_params = optax.incremental_update(
-            safety_critic.params, agent.target_safety_critic.params, agent.safety_tau
-        )
-        target_safety_critic = agent.target_safety_critic.replace(params=target_params)
-
-        metrics.update(tensorstats(current_qh, "qh_current"))
-        metrics["qh_target_stage_mean"] = jnp.maximum(
-            0.0, batch["costs"] - agent.cost_limit
-        ).mean()
-
-        new_agent = agent.replace(
-            safety_critic=safety_critic,
-            target_safety_critic=target_safety_critic,
-            rng=rng,
-        )
-        return new_agent, metrics
-
-    def update_actor(self, batch: Dict[str, jnp.ndarray]):
-        agent = self
-        B, A = batch["actions"].shape
-
-        key, rng = jax.random.split(agent.rng, 2)
-        time = jax.random.randint(key, (B,), 0, agent.T)
-        key, rng = jax.random.split(rng, 2)
-        noise_sample = jax.random.normal(key, (B, agent.act_dim))
-        key, rng = jax.random.split(rng, 2)
-        alpha_hats = agent.alpha_hats[time]
-        time = jnp.expand_dims(time, axis=1)
-        alpha_1 = jnp.expand_dims(jnp.sqrt(alpha_hats), axis=1)
-        alpha_2 = jnp.expand_dims(jnp.sqrt(1 - alpha_hats), axis=1)
-        noisy_actions = alpha_1 * batch["actions"] + alpha_2 * noise_sample
-
-        dropout_key, rng = jax.random.split(rng)
-        critic_1_jacobian = jax.grad(
-            lambda actions: agent.critic_1.apply_fn(
-                {"params": agent.critic_1.params},
-                batch["observations"],
-                actions,
-            ).sum()
-        )(noisy_actions)
-        assert critic_1_jacobian.shape == (B, A)
-        critic_2_jacobian = jax.grad(
-            lambda actions: agent.critic_2.apply_fn(
-                {"params": agent.critic_2.params},
-                batch["observations"],
-                actions,
-            ).sum()
-        )(noisy_actions)
-        assert critic_2_jacobian.shape == (B, A)
-        critic_jacobian = jnp.stack([critic_1_jacobian, critic_2_jacobian], 0).mean(0)
-
-        safety_q = agent.safety_critic.apply_fn(
-            {"params": agent.safety_critic.params},
-            batch["observations"],
-            noisy_actions,
-            training=True,
-        )
-        safety_value = jnp.maximum(0.0, safety_q)
-        safety_mask = safety_value <= agent.safety_threshold
-
-        safety_jacobian = jax.grad(
-            lambda actions: agent.safety_critic.apply_fn(
-                {"params": agent.safety_critic.params},
-                batch["observations"],
-                actions,
-            ).sum()
-        )(noisy_actions)
-        assert safety_jacobian.shape == (B, A)
-
-        phi = jnp.where(
-            safety_mask[:, None],
-            agent.M_q * critic_jacobian,
-            - agent.M_q * agent.safety_grad_scale * safety_jacobian,
-        )
-
-        # phi = agent.M_q * critic_jacobian - (agent.safe_lagrange_coef * agent.safety_grad_scale) * safety_jacobian
-
-        def actor_loss_fn(score_model_params):
-            dropout_key_inner, sampler_key = jax.random.split(dropout_key)
-            eps_pred = agent.score_model.apply_fn(
-                {"params": score_model_params},
-                batch["observations"],
-                noisy_actions,
-                time,
-                rngs={"dropout": dropout_key_inner},
-                training=True,
-            )
-            assert eps_pred.shape == (B, A)
-            target = - sg(phi)
-            matching_loss = jnp.square(target - eps_pred).mean(-1)
-
-            # Sample inside the loss_fn so gradients from the actor energy loss
-            # flow back to the score model parameters used by the sampler.
-            a0_actions, _ = ddpm_sampler(
-                agent.score_model.apply_fn,
-                score_model_params,
-                agent.T,
-                sampler_key,
-                agent.act_dim,
-                batch["observations"],
-                agent.alphas,
-                agent.alpha_hats,
-                agent.betas,
-                agent.ddpm_temperature,
-                agent.clip_sampler,
-            )
-
-            q1 = agent.critic_1.apply_fn(
-                {"params": agent.critic_1.params},
-                batch["observations"],
-                a0_actions,
-                training=True,
-            )
-            q2 = agent.critic_2.apply_fn(
-                {"params": agent.critic_2.params},
-                batch["observations"],
-                a0_actions,
-                training=True,
-            )
-            q_min = jnp.minimum(q1, q2)
-            qc = agent.safety_critic.apply_fn(
-                {"params": agent.safety_critic.params},
-                batch["observations"],
-                a0_actions,
-                training=True,
-            )
-            penalty = jnp.maximum(0.0, qc - agent.safety_threshold)
-            actor_loss = (-q_min + agent.safe_lagrange_coef * penalty).mean()
-
-            matching_loss_mean = matching_loss.mean()
-            total_loss = actor_loss + 0.5 * matching_loss_mean
-
-            metrics = {
-                "matching_loss": matching_loss_mean,
-                "actor_loss": actor_loss,
-                "total_loss": total_loss,
-            }
-            metrics.update(tensorstats(matching_loss, "matching_loss_stats"))
-            metrics.update(tensorstats(-q_min, "neg_q_min"))
-            metrics.update(tensorstats(penalty, "penalty"))
-            metrics.update(tensorstats(eps_pred, "eps_pred"))
-            metrics.update(tensorstats(phi, "phi"))
-            metrics.update(tensorstats(critic_jacobian, "critic_jacobian"))
-            metrics.update(tensorstats(safety_jacobian, "safety_jacobian"))
-            metrics["safety_mask_ratio"] = safety_mask.mean()
-            metrics["safety_value_mean"] = safety_value.mean()
-            return total_loss, metrics
-
-        key, rng = jax.random.split(rng, 2)
-        grads, metrics = jax.grad(actor_loss_fn, has_aux=True)(agent.score_model.params)
-        score_model = agent.score_model.apply_gradients(grads=grads)
-
-        new_agent = agent.replace(
-            score_model=score_model,
-            rng=rng,
-        )
-        return new_agent, metrics
-
-    @jax.jit
-    def sample_actions(self, observations: jnp.ndarray):
-        actions, new_agent = self.eval_actions(observations)
-        key, rng = jax.random.split(new_agent.rng, 2)
-        noise = jax.random.normal(key, shape=actions.shape) * 0.1
-        actions = jnp.clip(actions + noise, -1.0, 1.0)
-        key, rng = jax.random.split(rng, 2)
-        return actions, new_agent.replace(rng=rng)
-
-    @jax.jit
-    def eval_actions(self, observations: jnp.ndarray):
-        rng = self.rng
-        assert len(observations.shape) == 1
-        observations = observations[None]
-
-        actions, rng = ddpm_sampler(
-            self.score_model.apply_fn,
-            self.score_model.params,
+    def act(self, observation, deterministic: bool = False):
+        obs = tf.convert_to_tensor(observation[None], dtype=tf.float32)
+        actions = ddpm_sampler(
+            self.score_model,
             self.T,
-            rng,
+            self.act_dim,
+            obs,
+            self.alphas,
+            self.alpha_hats,
+            self.betas,
+            self.ddpm_temperature,
+            self.clip_sampler,
+            training=False,
+        )
+        action = actions[0]
+        if not deterministic:
+            noise = self._rng.normal(shape=action.shape, dtype=tf.float32) * 0.1
+            action = tf.clip_by_value(action + noise, -1.0, 1.0)
+        return action.numpy(), self
+
+    def _ddpm_next_actions(self, observations):
+        return ddpm_sampler(
+            self.score_model,
+            self.T,
             self.act_dim,
             observations,
             self.alphas,
@@ -595,30 +217,198 @@ class SafeScoreMatchingLearner:
             self.betas,
             self.ddpm_temperature,
             self.clip_sampler,
+            training=True,
         )
-        assert actions.shape == (1, self.act_dim)
-        _, rng = jax.random.split(rng, 2)
-        return jnp.squeeze(actions), self.replace(rng=rng)
 
-    @jax.jit
-    def update(self, batch: Dict[str, jnp.ndarray]):
-        new_agent = self
-        new_agent, critic_info = new_agent.update_q(batch)
-        new_agent, safety_info = new_agent.update_safety(batch)
-        new_agent, actor_info = new_agent.update_actor(batch)
-        return new_agent, {**actor_info, **critic_info, **safety_info}
+    def update_q(self, batch: Dict[str, tf.Tensor]):
+        obs, actions = batch["observations"], batch["actions"]
+        next_obs, rewards, not_done = batch["next_observations"], batch["rewards"], batch["not_terminated"]
+
+        next_actions = self._ddpm_next_actions(next_obs)
+        next_actions = tf.clip_by_value(next_actions + 0.1 * tf.random.normal(tf.shape(next_actions)), -1.0, 1.0)
+
+        next_q1 = self.target_critic_1(next_obs, next_actions, training=True)
+        next_q2 = self.target_critic_2(next_obs, next_actions, training=True)
+        next_v = tf.minimum(next_q1, next_q2)
+        target_q = rewards + self.discount * not_done * next_v
+
+        with tf.GradientTape(persistent=True) as tape:
+            q1 = self.critic_1(obs, actions, training=True)
+            q2 = self.critic_2(obs, actions, training=True)
+            loss1 = tf.reduce_mean(tf.square(q1 - tf.stop_gradient(target_q)))
+            loss2 = tf.reduce_mean(tf.square(q2 - tf.stop_gradient(target_q)))
+
+        grads1 = tape.gradient(loss1, self.critic_1.trainable_variables)
+        grads2 = tape.gradient(loss2, self.critic_2.trainable_variables)
+        self.critic_opt.apply_gradients(zip(grads1, self.critic_1.trainable_variables))
+        self.critic_opt.apply_gradients(zip(grads2, self.critic_2.trainable_variables))
+
+        soft_update(self.target_critic_1, self.critic_1, self.tau)
+        soft_update(self.target_critic_2, self.critic_2, self.tau)
+
+        return {
+            "critic_loss1": loss1,
+            "critic_loss2": loss2,
+            "target_q_mean": tf.reduce_mean(target_q),
+        }
+
+    def _safety_targets(self, batch: Dict[str, tf.Tensor]):
+        obs, actions = batch["observations"], batch["actions"]
+        next_obs, not_done, costs = batch["next_observations"], batch["not_terminated"], batch["costs"]
+        next_actions = self._ddpm_next_actions(next_obs)
+        next_actions = tf.clip_by_value(next_actions + 0.1 * tf.random.normal(tf.shape(next_actions)), -1.0, 1.0)
+        next_qh = self.target_safety_critic(next_obs, next_actions, training=True)
+        next_vh = tf.maximum(0.0, next_qh)
+        current_qh = self.safety_critic(obs, actions, training=True)
+        current_vh = tf.maximum(0.0, current_qh)
+        alpha_term = self.alpha_coef * current_vh
+        candidate = self.safety_discount * not_done * next_vh - current_vh + alpha_term
+        positive_candidate = tf.maximum(0.0, candidate)
+        stage_violation = tf.maximum(0.0, costs - self.cost_limit)
+        target = tf.maximum(stage_violation, positive_candidate)
+        return target, current_qh, stage_violation
+
+    def update_safety(self, batch: Dict[str, tf.Tensor]):
+        target, current_qh, stage_violation = self._safety_targets(batch)
+
+        with tf.GradientTape() as tape:
+            qh_pred = self.safety_critic(batch["observations"], batch["actions"], training=True)
+            relu_pred = tf.maximum(0.0, qh_pred)
+            diff = relu_pred - tf.stop_gradient(target)
+            hinge = tf.maximum(0.0, qh_pred - tf.stop_gradient(target))
+            loss = tf.reduce_mean(diff ** 2 + self.safety_lambda * hinge ** 2)
+
+        grads = tape.gradient(loss, self.safety_critic.trainable_variables)
+        self.safety_opt.apply_gradients(zip(grads, self.safety_critic.trainable_variables))
+        soft_update(self.target_safety_critic, self.safety_critic, self.safety_tau)
+
+        return {
+            "safety_loss": loss,
+            "qh_target_mean": tf.reduce_mean(target),
+            "qh_stage_mean": tf.reduce_mean(stage_violation),
+            "qh_pred_mean": tf.reduce_mean(current_qh),
+        }
+
+    def _critic_jacobian(self, critic_net: StateActionValue, obs: tf.Tensor, actions: tf.Tensor):
+        with tf.GradientTape() as tape:
+            tape.watch(actions)
+            q_vals = critic_net(obs, actions, training=True)
+        return tape.gradient(tf.reduce_sum(q_vals), actions)
+
+    def update_actor(self, batch: Dict[str, tf.Tensor]):
+        obs, actions = batch["observations"], batch["actions"]
+        B = tf.shape(actions)[0]
+        time_indices = tf.random.uniform((B,), minval=0, maxval=self.T, dtype=tf.int32)
+        noise_sample = tf.random.normal((B, self.act_dim))
+        alpha_hats = tf.gather(self.alpha_hats, time_indices)
+        alpha_1 = tf.sqrt(alpha_hats)[:, None]
+        alpha_2 = tf.sqrt(1.0 - alpha_hats)[:, None]
+        noisy_actions = alpha_1 * actions + alpha_2 * noise_sample
+        time_embed = tf.cast(time_indices[:, None], tf.float32)
+
+        critic_j1 = self._critic_jacobian(self.critic_1, obs, noisy_actions)
+        critic_j2 = self._critic_jacobian(self.critic_2, obs, noisy_actions)
+        critic_jacobian = (critic_j1 + critic_j2) / 2.0
+
+        with tf.GradientTape() as tape:
+            tape.watch(noisy_actions)
+            safety_q = self.safety_critic(obs, noisy_actions, training=True)
+        safety_value = tf.maximum(0.0, safety_q)
+        safety_mask = safety_value <= self.safety_threshold
+        safety_jacobian = tape.gradient(tf.reduce_sum(safety_q), noisy_actions)
+
+        phi = tf.where(
+            safety_mask[:, None],
+            self.M_q * critic_jacobian,
+            -self.M_q * self.safety_grad_scale * safety_jacobian,
+        )
+
+        with tf.GradientTape() as tape:
+            eps_pred = self.score_model(obs, noisy_actions, time_embed, training=True)
+            target = -phi
+            matching_loss = tf.reduce_mean(tf.square(target - eps_pred))
+
+            sampled_actions = self._ddpm_next_actions(obs)
+            q1 = self.critic_1(obs, sampled_actions, training=True)
+            q2 = self.critic_2(obs, sampled_actions, training=True)
+            q_min = tf.minimum(q1, q2)
+            qc = self.safety_critic(obs, sampled_actions, training=True)
+            penalty = tf.maximum(0.0, qc - self.safety_threshold)
+            actor_loss = tf.reduce_mean(-q_min + self.safe_lagrange_coef * penalty)
+            total_loss = actor_loss + 0.5 * matching_loss
+
+        grads = tape.gradient(total_loss, self.score_model.trainable_variables)
+        self.score_opt.apply_gradients(zip(grads, self.score_model.trainable_variables))
+
+        return {
+            "matching_loss": matching_loss,
+            "actor_loss": actor_loss,
+            "total_actor_loss": total_loss,
+            "phi_norm": tf.reduce_mean(tf.norm(phi, axis=-1)),
+            "safety_mask_ratio": tf.reduce_mean(tf.cast(safety_mask, tf.float32)),
+        }
+
+    def update(self, batch: Dict[str, tf.Tensor]):
+        critic_info = self.update_q(batch)
+        safety_info = self.update_safety(batch)
+        actor_info = self.update_actor(batch)
+        metrics = {}
+        metrics.update({k: v.numpy() if isinstance(v, tf.Tensor) else v for k, v in critic_info.items()})
+        metrics.update({k: v.numpy() if isinstance(v, tf.Tensor) else v for k, v in safety_info.items()})
+        metrics.update({k: v.numpy() if isinstance(v, tf.Tensor) else v for k, v in actor_info.items()})
+        return self, metrics
 
     def save(self, ckpt_dir: str, step: int):
-        checkpoints.save_checkpoint(
-            ckpt_dir, target=self, step=step, overwrite=True, keep=3
+        ckpt = tf.train.Checkpoint(
+            score_model=self.score_model,
+            critic_1=self.critic_1,
+            critic_2=self.critic_2,
+            target_critic_1=self.target_critic_1,
+            target_critic_2=self.target_critic_2,
+            safety_critic=self.safety_critic,
+            target_safety_critic=self.target_safety_critic,
+            score_opt=self.score_opt,
+            critic_opt=self.critic_opt,
+            safety_opt=self.safety_opt,
         )
+        manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=3)
+        manager.save(checkpoint_number=step)
 
     @classmethod
-    def load(cls, ckpt_dir: str, step: Optional[int] = None):
-        return checkpoints.restore_checkpoint(ckpt_dir, target=None, step=step)
+    def load(cls, learner: "SafeScoreMatchingLearner", ckpt_dir: str):
+        ckpt = tf.train.Checkpoint(
+            score_model=learner.score_model,
+            critic_1=learner.critic_1,
+            critic_2=learner.critic_2,
+            target_critic_1=learner.target_critic_1,
+            target_critic_2=learner.target_critic_2,
+            safety_critic=learner.safety_critic,
+            target_safety_critic=learner.target_safety_critic,
+            score_opt=learner.score_opt,
+            critic_opt=learner.critic_opt,
+            safety_opt=learner.safety_opt,
+        )
+        latest = tf.train.latest_checkpoint(ckpt_dir)
+        ckpt.restore(latest).expect_partial()
+        return learner
 
     def get_weights(self):
-        return serialization.to_state_dict(self)
+        return {
+            "score_model": self.score_model.get_weights(),
+            "critic_1": self.critic_1.get_weights(),
+            "critic_2": self.critic_2.get_weights(),
+            "target_critic_1": self.target_critic_1.get_weights(),
+            "target_critic_2": self.target_critic_2.get_weights(),
+            "safety_critic": self.safety_critic.get_weights(),
+            "target_safety_critic": self.target_safety_critic.get_weights(),
+        }
 
-    def set_weights(self, state_dict):
-        return serialization.from_state_dict(self, state_dict)
+    def set_weights(self, weights):
+        self.score_model.set_weights(weights["score_model"])
+        self.critic_1.set_weights(weights["critic_1"])
+        self.critic_2.set_weights(weights["critic_2"])
+        self.target_critic_1.set_weights(weights["target_critic_1"])
+        self.target_critic_2.set_weights(weights["target_critic_2"])
+        self.safety_critic.set_weights(weights["safety_critic"])
+        self.target_safety_critic.set_weights(weights["target_safety_critic"])
+

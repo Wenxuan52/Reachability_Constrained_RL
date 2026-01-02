@@ -1,19 +1,14 @@
-import flax.linen as nn
-import jax.numpy as jnp
-
-from jaxrl5.networks import default_init
+import tensorflow as tf
+from .mlp import MLP
 
 
-class StateActionValue(nn.Module):
-    base_cls: nn.Module
+class StateActionValue(tf.keras.Model):
+    def __init__(self, hidden_dims, **kwargs):
+        super().__init__(**kwargs)
+        self.encoder = MLP(hidden_dims, activate_final=True)
+        self.out_layer = tf.keras.layers.Dense(1, activation=None)
 
-    @nn.compact
-    def __call__(
-        self, observations: jnp.ndarray, actions: jnp.ndarray, *args, **kwargs
-    ) -> jnp.ndarray:
-        inputs = jnp.concatenate([observations, actions], axis=-1)
-        outputs = self.base_cls()(inputs, *args, **kwargs)
-
-        value = nn.Dense(1, kernel_init=default_init())(outputs)
-
-        return jnp.squeeze(value, -1)
+    def call(self, obs, act, training: bool = False):
+        x = tf.concat([obs, act], axis=-1)
+        x = self.encoder(x, training=training)
+        return tf.squeeze(self.out_layer(x), axis=-1)
