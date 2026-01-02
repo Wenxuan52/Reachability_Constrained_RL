@@ -47,6 +47,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=str, default="training", choices=["training", "testing"])
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--random_seed", type=int, default=None)
     parser.add_argument("--total_steps", type=int, default=200000)
     parser.add_argument("--log_interval", type=int, default=1000)
     parser.add_argument("--eval_interval", type=int, default=10000)
@@ -58,7 +59,7 @@ def parse_args():
     parser.add_argument("--test_iter_list", type=int, nargs="*", default=None)
     parser.add_argument("--num_eval_episode", type=int, default=5)
     parser.add_argument("--fixed_steps", type=int, default=None)
-    parser.add_argument("--config", type=str, default="train_scripts/env_configs/constrained_tracking.yaml")
+    parser.add_argument("--config", type=str, default="train_scripts/env_configs/ssm_constrained_tracking.yaml")
     parser.add_argument("--ddpm_temperature", type=float, default=1.0)
     parser.add_argument("--T", type=int, default=5)
     parser.add_argument("--clip_sampler", action="store_true")
@@ -74,6 +75,8 @@ def parse_args():
     parser.add_argument("--M_q", type=float, default=1.0)
     parser.add_argument("--save_model", action="store_true")
     args = parser.parse_args()
+    if args.random_seed is None:
+        args.random_seed = args.seed
     return args
 
 
