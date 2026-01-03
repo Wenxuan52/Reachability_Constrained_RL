@@ -1,9 +1,9 @@
 ===== Job Info =====
-JOB_ID=4921
+JOB_ID=4929
 HOST=rootrunner
 CONDA_PREFIX=/scratch_root/wy524/miniconda3/envs/rcrl
 CUDA_VISIBLE_DEVICES=0
-Sat Jan  3 05:30:03 2026       
+Sat Jan  3 05:53:07 2026       
 +-----------------------------------------------------------------------------------------+
 | NVIDIA-SMI 570.195.03             Driver Version: 570.195.03     CUDA Version: 12.8     |
 |-----------------------------------------+------------------------+----------------------+
@@ -12,7 +12,7 @@ Sat Jan  3 05:30:03 2026
 |                                         |                        |               MIG M. |
 |=========================================+========================+======================|
 |   0  NVIDIA H200                    Off |   00000000:23:00.0 Off |                    0 |
-| N/A   27C    P0            116W /  700W |     525MiB / 143771MiB |      0%      Default |
+| N/A   26C    P0            116W /  700W |     525MiB / 143771MiB |      0%      Default |
 |                                         |                        |             Disabled |
 +-----------------------------------------+------------------------+----------------------+
                                                                                          
@@ -30,3 +30,5 @@ tfp 0.23.0
 protobuf 4.25.8
 gpus []
 ====================
+[36m(SSMWorker pid=1752670)[0m @1=vertcat(x, x_dot, z, z_dot, theta, theta_dot), @2=vertcat(T1, T2), (mac(mac((0.5*(@1-Xr)'),Q,zeros(1x6)),(@1-Xr),0)+mac(mac((0.5*(@2-Ur)'),R,zeros(1x2)),(@2-Ur),0))
+[36m(DummyEvaluator pid=1752734)[0m @1=vertcat(x, x_dot, z, z_dot, theta, theta_dot), @2=vertcat(T1, T2), (mac(mac((0.5*(@1-Xr)'),Q,zeros(1x6)),(@1-Xr),0)+mac(mac((0.5*(@2-Ur)'),R,zeros(1x2)),(@2-Ur),0))[32m [repeated 5x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m

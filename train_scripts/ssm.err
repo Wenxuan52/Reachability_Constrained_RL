@@ -1,0 +1,202 @@
+2026-01-03 05:53:08.190143: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-01-03 05:53:08.190227: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-01-03 05:53:08.191710: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+Warning: Gym version v0.24.1 has a number of critical issues with `gym.make` such that the `reset` and `step` functions are called before returning the environment. It is recommend to downgrading to v0.23.1 or upgrading to v0.25.1
+Additionally, Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+INFO:__main__:begin training agents with parameter Namespace(mode='training', random_seed=0, actor_lr=0.0003, critic_lr=0.0003, safety_lr=0.0003, T=5, beta_schedule='vp', ddpm_temperature=1.0, replay_batch_size=256, batch_size=512, max_buffer_size=500000, num_workers=4, num_learners=1, total_steps=2000000, eval_interval=10000, save_interval=50000, log_interval=100, result_dir='../results/Safexp-QuadrotorTrajectoryTracking-v0/quadrotor_ssm/2026-01-03-05-53-12_seed0000', log_dir='../results/Safexp-QuadrotorTrajectoryTracking-v0/quadrotor_ssm/2026-01-03-05-53-12_seed0000/logs', model_dir='../results/Safexp-QuadrotorTrajectoryTracking-v0/quadrotor_ssm/2026-01-03-05-53-12_seed0000/models', model_load_dir=None, model_load_ite=None, test_dir=None, test_iter_list=[200000])
+/scratch_root/wy524/Reachability_Constrained_RL/safe-control-gym/safe_control_gym/utils/configuration.py:72: UserWarning: No agent/task config given.
+  warnings.warn("No agent/task config given.")
+2026-01-03 05:53:16,590	INFO worker.py:2007 -- Started a local Ray instance.
+/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/ray/_private/worker.py:2046: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default). To enable this behavior and turn off this error message, set RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0
+  warnings.warn(
+[36m(pid=1752704)[0m Warning: Gym version v0.24.1 has a number of critical issues with `gym.make` such that the `reset` and `step` functions are called before returning the environment. It is recommend to downgrading to v0.23.1 or upgrading to v0.25.1
+[36m(pid=1752704)[0m Additionally, Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+[36m(pid=1752704)[0m Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+[36m(pid=1752704)[0m See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+[36m(SSMWorker pid=1752704)[0m pybullet build time: Jan 29 2025 23:16:28
+[36m(SSMWorker pid=1752665)[0m /scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/gym/spaces/box.py:112: UserWarning: [33mWARN: Box bound precision lowered by casting to float32[0m
+[36m(SSMWorker pid=1752665)[0m   logger.warn(f"Box bound precision lowered by casting to {self.dtype}")
+[36m(SSMWorker pid=1752665)[0m CasADi - 2026-01-03 05:53:24 WARNING("The options 't0', 'tf', 'grid' and 'output_t0' have been deprecated.
+[36m(SSMWorker pid=1752665)[0m The same functionality is provided by providing additional input arguments to the 'integrator' function, in particular:
+[36m(SSMWorker pid=1752665)[0m  * Call integrator(..., t0, tf, options) for a single output time, or
+[36m(SSMWorker pid=1752665)[0m  * Call integrator(..., t0, grid, options) for multiple grid points.
+[36m(SSMWorker pid=1752665)[0m The legacy 'output_t0' option can be emulated by including or excluding 't0' in 'grid'.
+[36m(SSMWorker pid=1752665)[0m Backwards compatibility is provided in this release only.") [.../casadi/core/integrator.cpp:692]
+[36m(SSMWorker pid=1752704)[0m 2026-01-03 05:53:24.423328: E external/xla/xla/stream_executor/cuda/cuda_platform.cc:51] failed call to cuInit: INTERNAL: CUDA error: Failed call to cuInit: CUDA_ERROR_NO_DEVICE: no CUDA-capable device is detected
+[36m(SSMWorker pid=1752704)[0m Exception raised in creation task: The actor died because of an error raised in its creation task, [36mray::SSMWorker.__init__()[39m (pid=1752704, ip=146.179.4.6, actor_id=ac3c89d1063b16c717a7b0ca01000000, repr=<train_scripts4ssm.SSMWorker object at 0x7aece339ce20>)
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/xla_bridge.py", line 1000, in _init_backend
+[36m(SSMWorker pid=1752704)[0m     backend = registration.factory()
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/xla_bridge.py", line 692, in factory
+[36m(SSMWorker pid=1752704)[0m     return xla_client.make_c_api_client(plugin_name, updated_options, None)
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jaxlib/xla_client.py", line 207, in make_c_api_client
+[36m(SSMWorker pid=1752704)[0m     return _xla.get_c_api_client(plugin_name, options, distributed_client)
+[36m(SSMWorker pid=1752704)[0m jaxlib.xla_extension.XlaRuntimeError: FAILED_PRECONDITION: No visible GPU devices.
+[36m(SSMWorker pid=1752704)[0m 
+[36m(SSMWorker pid=1752704)[0m During handling of the above exception, another exception occurred:
+[36m(SSMWorker pid=1752704)[0m 
+[36m(SSMWorker pid=1752704)[0m jax.errors.SimplifiedTraceback: For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+[36m(SSMWorker pid=1752704)[0m 
+[36m(SSMWorker pid=1752704)[0m The above exception was the direct cause of the following exception:
+[36m(SSMWorker pid=1752704)[0m 
+[36m(SSMWorker pid=1752704)[0m [36mray::SSMWorker.__init__()[39m (pid=1752704, ip=146.179.4.6, actor_id=ac3c89d1063b16c717a7b0ca01000000, repr=<train_scripts4ssm.SSMWorker object at 0x7aece339ce20>)
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/Reachability_Constrained_RL/train_scripts/./train_scripts4ssm.py", line 92, in __init__
+[36m(SSMWorker pid=1752704)[0m     self.learner = SafeScoreMatchingLearner.create(
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/Reachability_Constrained_RL/learners/ssm/safe_matching_learner.py", line 113, in create
+[36m(SSMWorker pid=1752704)[0m     rng = jax.random.PRNGKey(seed)
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/random.py", line 246, in PRNGKey
+[36m(SSMWorker pid=1752704)[0m     return _return_prng_keys(True, _key('PRNGKey', seed, impl))
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/random.py", line 198, in _key
+[36m(SSMWorker pid=1752704)[0m     return prng.random_seed(seed, impl=impl)
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/prng.py", line 529, in random_seed
+[36m(SSMWorker pid=1752704)[0m     seeds_arr = jnp.asarray(np.int64(seeds))
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/numpy/lax_numpy.py", line 5732, in asarray
+[36m(SSMWorker pid=1752704)[0m     return array(a, dtype=dtype, copy=bool(copy), order=order, device=device)
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/numpy/lax_numpy.py", line 5566, in array
+[36m(SSMWorker pid=1752704)[0m     out_array: Array = lax_internal._convert_element_type(
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/lax/lax.py", line 1414, in _convert_element_type
+[36m(SSMWorker pid=1752704)[0m     return convert_element_type_p.bind(
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 502, in bind
+[36m(SSMWorker pid=1752704)[0m     return self._true_bind(*args, **params)
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 520, in _true_bind
+[36m(SSMWorker pid=1752704)[0m     return self.bind_with_trace(prev_trace, args, params)
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/lax/lax.py", line 4371, in _convert_element_type_bind_with_trace
+[36m(SSMWorker pid=1752704)[0m     operand = core.Primitive.bind_with_trace(convert_element_type_p, trace, args, params)
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 525, in bind_with_trace
+[36m(SSMWorker pid=1752704)[0m     return trace.process_primitive(self, args, params)
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 1024, in process_primitive
+[36m(SSMWorker pid=1752704)[0m     return primitive.impl(*args, **params)
+[36m(SSMWorker pid=1752704)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/dispatch.py", line 90, in apply_primitive
+[36m(SSMWorker pid=1752704)[0m     outs = fun(*args)
+[36m(SSMWorker pid=1752704)[0m RuntimeError: Unable to initialize backend 'cuda': FAILED_PRECONDITION: No visible GPU devices. (you may need to uninstall the failing plugin package, or set JAX_PLATFORMS=cpu to skip this backend.)
+[36m(SSMWorker pid=1752665)[0m 
+[36m(SSMWorker pid=1752665)[0m 
+[36m(SSMWorker pid=1752665)[0m 
+[36m(SSMWorker pid=1752665)[0m 
+[36m(SSMWorker pid=1752670)[0m 
+[36m(SSMWorker pid=1752670)[0m 
+[36m(SSMWorker pid=1752670)[0m 
+[36m(SSMWorker pid=1752670)[0m 
+[36m(SSMWorker pid=1752667)[0m 
+[36m(SSMWorker pid=1752667)[0m 
+[36m(SSMWorker pid=1752667)[0m 
+[36m(SSMWorker pid=1752667)[0m 
+Traceback (most recent call last):
+  File "/scratch_root/wy524/Reachability_Constrained_RL/train_scripts/./train_scripts4ssm.py", line 333, in <module>
+    main()
+  File "/scratch_root/wy524/Reachability_Constrained_RL/train_scripts/./train_scripts4ssm.py", line 267, in main
+    base_weights = ray.get(learners[0].get_weights.remote())
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/ray/_private/auto_init_hook.py", line 22, in auto_init_wrapper
+    return fn(*args, **kwargs)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/ray/_private/client_mode_hook.py", line 104, in wrapper
+    return func(*args, **kwargs)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/ray/_private/worker.py", line 2967, in get
+    values, debugger_breakpoint = worker.get_objects(
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/ray/_private/worker.py", line 1017, in get_objects
+    raise value
+ray.exceptions.ActorDiedError: The actor died because of an error raised in its creation task, [36mray::SSMLearnerActor.__init__()[39m (pid=1752716, ip=146.179.4.6, actor_id=05b08daa90e53c111d74148f01000000, repr=<train_scripts4ssm.SSMLearnerActor object at 0x733dd59a42e0>)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/xla_bridge.py", line 1000, in _init_backend
+    backend = registration.factory()
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/xla_bridge.py", line 692, in factory
+    return xla_client.make_c_api_client(plugin_name, updated_options, None)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jaxlib/xla_client.py", line 207, in make_c_api_client
+    return _xla.get_c_api_client(plugin_name, options, distributed_client)
+jaxlib.xla_extension.XlaRuntimeError: FAILED_PRECONDITION: No visible GPU devices.
+
+During handling of the above exception, another exception occurred:
+
+jax.errors.SimplifiedTraceback: For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+
+The above exception was the direct cause of the following exception:
+
+[36mray::SSMLearnerActor.__init__()[39m (pid=1752716, ip=146.179.4.6, actor_id=05b08daa90e53c111d74148f01000000, repr=<train_scripts4ssm.SSMLearnerActor object at 0x733dd59a42e0>)
+  File "/scratch_root/wy524/Reachability_Constrained_RL/train_scripts/./train_scripts4ssm.py", line 135, in __init__
+    self.learner = SafeScoreMatchingLearner.create(
+  File "/scratch_root/wy524/Reachability_Constrained_RL/learners/ssm/safe_matching_learner.py", line 113, in create
+    rng = jax.random.PRNGKey(seed)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/random.py", line 246, in PRNGKey
+    return _return_prng_keys(True, _key('PRNGKey', seed, impl))
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/random.py", line 198, in _key
+    return prng.random_seed(seed, impl=impl)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/prng.py", line 529, in random_seed
+    seeds_arr = jnp.asarray(np.int64(seeds))
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/numpy/lax_numpy.py", line 5732, in asarray
+    return array(a, dtype=dtype, copy=bool(copy), order=order, device=device)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/numpy/lax_numpy.py", line 5566, in array
+    out_array: Array = lax_internal._convert_element_type(
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/lax/lax.py", line 1414, in _convert_element_type
+    return convert_element_type_p.bind(
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 502, in bind
+    return self._true_bind(*args, **params)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 520, in _true_bind
+    return self.bind_with_trace(prev_trace, args, params)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/lax/lax.py", line 4371, in _convert_element_type_bind_with_trace
+    operand = core.Primitive.bind_with_trace(convert_element_type_p, trace, args, params)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 525, in bind_with_trace
+    return trace.process_primitive(self, args, params)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 1024, in process_primitive
+    return primitive.impl(*args, **params)
+  File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/dispatch.py", line 90, in apply_primitive
+    outs = fun(*args)
+RuntimeError: Unable to initialize backend 'cuda': FAILED_PRECONDITION: No visible GPU devices. (you may need to uninstall the failing plugin package, or set JAX_PLATFORMS=cpu to skip this backend.)
+[36m(SSMLearnerActor pid=1752716)[0m 
+[36m(SSMLearnerActor pid=1752716)[0m 
+[36m(SSMLearnerActor pid=1752716)[0m 
+[36m(SSMLearnerActor pid=1752716)[0m 
+[36m(pid=1752734)[0m Warning: Gym version v0.24.1 has a number of critical issues with `gym.make` such that the `reset` and `step` functions are called before returning the environment. It is recommend to downgrading to v0.23.1 or upgrading to v0.25.1[32m [repeated 5x across cluster][0m
+[36m(pid=1752734)[0m Additionally, Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.[32m [repeated 5x across cluster][0m
+[36m(pid=1752734)[0m Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.[32m [repeated 5x across cluster][0m
+[36m(pid=1752734)[0m See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.[32m [repeated 5x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m pybullet build time: Jan 29 2025 23:16:28[32m [repeated 5x across cluster][0m
+[36m(DummyEvaluator pid=1752734)[0m /scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/gym/spaces/box.py:112: UserWarning: [33mWARN: Box bound precision lowered by casting to float32[0m[32m [repeated 5x across cluster][0m
+[36m(DummyEvaluator pid=1752734)[0m   logger.warn(f"Box bound precision lowered by casting to {self.dtype}")[32m [repeated 5x across cluster][0m
+[36m(DummyEvaluator pid=1752734)[0m CasADi - 2026-01-03 05:53:24 WARNING("The options 't0', 'tf', 'grid' and 'output_t0' have been deprecated.[32m [repeated 5x across cluster][0m
+[36m(DummyEvaluator pid=1752734)[0m The same functionality is provided by providing additional input arguments to the 'integrator' function, in particular:[32m [repeated 5x across cluster][0m
+[36m(DummyEvaluator pid=1752734)[0m  * Call integrator(..., t0, tf, options) for a single output time, or[32m [repeated 5x across cluster][0m
+[36m(DummyEvaluator pid=1752734)[0m  * Call integrator(..., t0, grid, options) for multiple grid points.[32m [repeated 5x across cluster][0m
+[36m(DummyEvaluator pid=1752734)[0m The legacy 'output_t0' option can be emulated by including or excluding 't0' in 'grid'.[32m [repeated 5x across cluster][0m
+[36m(DummyEvaluator pid=1752734)[0m Backwards compatibility is provided in this release only.") [.../casadi/core/integrator.cpp:692][32m [repeated 5x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m 2026-01-03 05:53:24.593264: E external/xla/xla/stream_executor/cuda/cuda_platform.cc:51] failed call to cuInit: INTERNAL: CUDA error: Failed call to cuInit: CUDA_ERROR_NO_DEVICE: no CUDA-capable device is detected[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m Exception raised in creation task: The actor died because of an error raised in its creation task, [36mray::SSMLearnerActor.__init__()[39m (pid=1752716, ip=146.179.4.6, actor_id=05b08daa90e53c111d74148f01000000, repr=<train_scripts4ssm.SSMLearnerActor object at 0x733dd59a42e0>)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/xla_bridge.py", line 1000, in _init_backend[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     backend = registration.factory()[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/xla_bridge.py", line 692, in factory[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     return xla_client.make_c_api_client(plugin_name, updated_options, None)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jaxlib/xla_client.py", line 207, in make_c_api_client[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     return _xla.get_c_api_client(plugin_name, options, distributed_client)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m jaxlib.xla_extension.XlaRuntimeError: FAILED_PRECONDITION: No visible GPU devices.[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m During handling of the above exception, another exception occurred:[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m jax.errors.SimplifiedTraceback: For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m The above exception was the direct cause of the following exception:[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m [36mray::SSMLearnerActor.__init__()[39m (pid=1752716, ip=146.179.4.6, actor_id=05b08daa90e53c111d74148f01000000, repr=<train_scripts4ssm.SSMLearnerActor object at 0x733dd59a42e0>)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/Reachability_Constrained_RL/train_scripts/./train_scripts4ssm.py", line 135, in __init__[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     self.learner = SafeScoreMatchingLearner.create([32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/Reachability_Constrained_RL/learners/ssm/safe_matching_learner.py", line 113, in create[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     rng = jax.random.PRNGKey(seed)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/random.py", line 246, in PRNGKey[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     return _return_prng_keys(True, _key('PRNGKey', seed, impl))[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/random.py", line 198, in _key[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     return prng.random_seed(seed, impl=impl)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/prng.py", line 529, in random_seed[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     seeds_arr = jnp.asarray(np.int64(seeds))[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/numpy/lax_numpy.py", line 5732, in asarray[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     return array(a, dtype=dtype, copy=bool(copy), order=order, device=device)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/numpy/lax_numpy.py", line 5566, in array[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     out_array: Array = lax_internal._convert_element_type([32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/lax/lax.py", line 1414, in _convert_element_type[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     return convert_element_type_p.bind([32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 502, in bind[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     return self._true_bind(*args, **params)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 520, in _true_bind[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     return self.bind_with_trace(prev_trace, args, params)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/lax/lax.py", line 4371, in _convert_element_type_bind_with_trace[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     operand = core.Primitive.bind_with_trace(convert_element_type_p, trace, args, params)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 525, in bind_with_trace[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     return trace.process_primitive(self, args, params)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/core.py", line 1024, in process_primitive[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     return primitive.impl(*args, **params)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m   File "/scratch_root/wy524/miniconda3/envs/rcrl/lib/python3.10/site-packages/jax/_src/dispatch.py", line 90, in apply_primitive[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m     outs = fun(*args)[32m [repeated 4x across cluster][0m
+[36m(SSMLearnerActor pid=1752716)[0m RuntimeError: Unable to initialize backend 'cuda': FAILED_PRECONDITION: No visible GPU devices. (you may need to uninstall the failing plugin package, or set JAX_PLATFORMS=cpu to skip this backend.)[32m [repeated 4x across cluster][0m
+srun: error: rootrunner: task 0: Exited with exit code 1
