@@ -10,7 +10,7 @@ from typing import Dict, Optional, Sequence, Tuple, Union
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 import flax.linen as nn
-import gymnasium as gym
+import gym
 import jax
 import jax.numpy as jnp
 import numpy as np
