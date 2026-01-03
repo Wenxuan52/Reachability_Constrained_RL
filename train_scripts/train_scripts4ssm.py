@@ -17,9 +17,12 @@ import sys
 from copy import deepcopy
 from typing import Dict, List, Tuple
 
-# JAX/XLA memory knobs must be set before importing jax or ray workers spawn.
+# JAX/XLA knobs must be set before importing jax or spawning ray workers.
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.85")
+# Force CPU backend to avoid GPU plugin initialization failures on nodes without
+# visible CUDA devices (ensures ray actors inherit the setting).
+os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir))
 
@@ -79,6 +82,7 @@ class SimpleReplayBuffer:
 @ray.remote
 class SSMWorker:
     def __init__(self, args, worker_id: int):
+        os.environ.setdefault("JAX_PLATFORMS", "cpu")
         self.args = args
         self.worker_id = worker_id
         self.rng = np.random.RandomState(args.random_seed + worker_id)
@@ -127,6 +131,7 @@ class SSMWorker:
 @ray.remote
 class SSMLearnerActor:
     def __init__(self, args):
+        os.environ.setdefault("JAX_PLATFORMS", "cpu")
         config = deepcopy(args.config)
         config.quadrotor_config["episode_len_sec"] = MAX_EPISODE_LEN / config.quadrotor_config["ctrl_freq"]
         env = make(DEFAULT_ENV, **config.quadrotor_config)
