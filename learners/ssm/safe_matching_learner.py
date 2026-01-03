@@ -5,7 +5,7 @@ from functools import partial
 from typing import Dict, Optional, Sequence, Tuple, Union
 
 import flax.linen as nn
-import gymnasium as gym
+import gym
 import jax
 import jax.numpy as jnp
 import numpy as np
