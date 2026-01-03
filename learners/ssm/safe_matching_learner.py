@@ -1,14 +1,22 @@
 """Safe Score Matching learner repackaged for RCRL."""
 from __future__ import annotations
 
+import os
 from functools import partial
 from typing import Dict, Optional, Sequence, Tuple, Union
+
+# Enforce CPU execution to avoid accidental GPU backend selection on hosts
+# without accessible CUDA devices. This must be set before any JAX operations.
+os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 import flax.linen as nn
 import gym
 import jax
 import jax.numpy as jnp
 import numpy as np
+
+jax.config.update("jax_platforms", "cpu")
+jax.config.update("jax_disable_jit", False)
 import optax
 from flax import serialization, struct
 from flax.training.train_state import TrainState

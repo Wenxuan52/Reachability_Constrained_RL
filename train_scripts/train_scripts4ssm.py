@@ -18,11 +18,11 @@ from copy import deepcopy
 from typing import Dict, List, Tuple
 
 # JAX/XLA knobs must be set before importing jax or spawning ray workers.
-os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.85")
 # Force CPU backend to avoid GPU plugin initialization failures on nodes without
 # visible CUDA devices (ensures ray actors inherit the setting).
-os.environ.setdefault("JAX_PLATFORMS", "cpu")
+os.environ["JAX_PLATFORMS"] = "cpu"
 
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir))
 
@@ -82,7 +82,7 @@ class SimpleReplayBuffer:
 @ray.remote
 class SSMWorker:
     def __init__(self, args, worker_id: int):
-        os.environ.setdefault("JAX_PLATFORMS", "cpu")
+        os.environ["JAX_PLATFORMS"] = "cpu"
         self.args = args
         self.worker_id = worker_id
         self.rng = np.random.RandomState(args.random_seed + worker_id)
@@ -131,7 +131,7 @@ class SSMWorker:
 @ray.remote
 class SSMLearnerActor:
     def __init__(self, args):
-        os.environ.setdefault("JAX_PLATFORMS", "cpu")
+        os.environ["JAX_PLATFORMS"] = "cpu"
         config = deepcopy(args.config)
         config.quadrotor_config["episode_len_sec"] = MAX_EPISODE_LEN / config.quadrotor_config["ctrl_freq"]
         env = make(DEFAULT_ENV, **config.quadrotor_config)
@@ -263,10 +263,20 @@ def main():
         with open(args.result_dir + '/config.json', 'w', encoding='utf-8') as f:
             json.dump(vars(args), f, ensure_ascii=False, indent=4)
 
+        runtime_env = {
+            "env": {
+                "JAX_PLATFORMS": "cpu",
+                "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
+                "XLA_PYTHON_CLIENT_MEM_FRACTION": os.environ.get(
+                    "XLA_PYTHON_CLIENT_MEM_FRACTION", "0.85"
+                ),
+            }
+        }
+
         buffer = SimpleReplayBuffer.remote(args.max_buffer_size, args.replay_batch_size)
-        learners = [SSMLearnerActor.remote(args) for _ in range(args.num_learners)]
-        workers = [SSMWorker.remote(args, i + 1) for i in range(args.num_workers)]
-        evaluator = DummyEvaluator.remote(args)
+        learners = [SSMLearnerActor.options(runtime_env=runtime_env).remote(args) for _ in range(args.num_learners)]
+        workers = [SSMWorker.options(runtime_env=runtime_env).remote(args, i + 1) for i in range(args.num_workers)]
+        evaluator = DummyEvaluator.options(runtime_env=runtime_env).remote(args)
 
         # sync initial weights
         base_weights = ray.get(learners[0].get_weights.remote())
@@ -317,7 +327,16 @@ def main():
             saved_args = argparse.Namespace(**json.load(f))
         args.__dict__.update(saved_args.__dict__)
         ray.init(object_store_memory=5 * 1024 * 1024 * 1024)
-        evaluator = DummyEvaluator.remote(args)
+        runtime_env = {
+            "env": {
+                "JAX_PLATFORMS": "cpu",
+                "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
+                "XLA_PYTHON_CLIENT_MEM_FRACTION": os.environ.get(
+                    "XLA_PYTHON_CLIENT_MEM_FRACTION", "0.85"
+                ),
+            }
+        }
+        evaluator = DummyEvaluator.options(runtime_env=runtime_env).remote(args)
         for test_iter in args.test_iter_list:
             ckpt_dir = os.path.join(weights_dir, 'models', f'iter_{test_iter}')
             config = deepcopy(args.config_eval)
